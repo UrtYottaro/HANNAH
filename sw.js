@@ -1,7 +1,7 @@
 // HANNAH Service Worker
 // キャッシュ戦略: Cache First (オフライン優先)
 
-const CACHE_NAME = 'hannah-v0.1.19';
+const CACHE_NAME = 'hannah-v0.1.20';
 const ASSETS = [
   './',
   './index.html',

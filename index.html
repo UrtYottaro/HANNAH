@@ -2078,6 +2078,34 @@
   }
   .perm-del-btn:hover { border-color:#ff6b6b; color:#ff6b6b; }
 
+
+  /* ══ タッチ操作対応 ══ */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, .btn, .nav-btn, .nav-tool-btn, .memo-card,
+  .new-memo-btn, .folder-chip, .folder-dock-item,
+  .gear-menu-item, .folder-dock-dots, .nav-gear,
+  .sidebar-title, .memo-panel {
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+  .sidebar, .editor-area, #editor-area {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+  .app {
+    touch-action: pan-y;
+  }
+  /* タップ時のフィードバック */
+  .memo-card:active {
+    opacity: 0.75;
+    transition: opacity 0.1s;
+  }
+  button:active, .btn:active {
+    opacity: 0.75;
+    transition: opacity 0.1s;
+  }
 </style>
 </head>
 <body>
@@ -2608,6 +2636,11 @@ function renderMemoList(filtered) {
       <div class="memo-card-date">${folderBadge}${dateStr}</div>
     `;
     card.onclick = () => openMemo(memo.id);
+    // タッチデバイス対応: touchendで即座にopenMemo
+    card.addEventListener('touchend', function(e) {
+      if (e.cancelable) e.preventDefault();
+      openMemo(memo.id);
+    }, { passive: false });
     // 長押し → ドラッグ起動
     initMemoDrag(card, memo.id);
     container.appendChild(card);
@@ -4471,6 +4504,47 @@ function exportAllFoldersAsHTML() {
   </div>
 </div>
 
+
+<script>
+// ══ タッチ操作グローバル対応 ══
+(function() {
+  // タップをclickとして正確に発火させる
+  // （300ms遅延を除去 + Windows Touch対応）
+  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  document.addEventListener('touchend', function(e) {
+    const dx = Math.abs(e.changedTouches[0].clientX - touchStartX);
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+    const dt = Date.now() - touchStartTime;
+
+    // 移動量が少なく（スクロールでない）、短時間のタップ
+    if (dx < 10 && dy < 10 && dt < 500) {
+      const target = e.target;
+      // clickイベントを即時発火
+      if (target && typeof target.click === 'function') {
+        // デフォルトのclickが遅延する場合に備えて即時発火
+        setTimeout(() => {
+          if (!e.defaultPrevented) target.click();
+        }, 0);
+      }
+    }
+  }, { passive: true });
+
+  // Pointer Events対応（Windows Touch Screen）
+  document.addEventListener('pointerup', function(e) {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      // pointer-based touchはそのまま通す
+    }
+  }, { passive: true });
+})();
+</script>
+
 <script>
 // ── Service Worker 登録 ──
 if ('serviceWorker' in navigator) {
@@ -5784,6 +5858,47 @@ function sendViaMailto() {
     </div>
   </div>
 </div>
+
+
+<script>
+// ══ タッチ操作グローバル対応 ══
+(function() {
+  // タップをclickとして正確に発火させる
+  // （300ms遅延を除去 + Windows Touch対応）
+  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  document.addEventListener('touchend', function(e) {
+    const dx = Math.abs(e.changedTouches[0].clientX - touchStartX);
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+    const dt = Date.now() - touchStartTime;
+
+    // 移動量が少なく（スクロールでない）、短時間のタップ
+    if (dx < 10 && dy < 10 && dt < 500) {
+      const target = e.target;
+      // clickイベントを即時発火
+      if (target && typeof target.click === 'function') {
+        // デフォルトのclickが遅延する場合に備えて即時発火
+        setTimeout(() => {
+          if (!e.defaultPrevented) target.click();
+        }, 0);
+      }
+    }
+  }, { passive: true });
+
+  // Pointer Events対応（Windows Touch Screen）
+  document.addEventListener('pointerup', function(e) {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      // pointer-based touchはそのまま通す
+    }
+  }, { passive: true });
+})();
+</script>
 
 <script>
 // ── Service Worker 登録 ──
