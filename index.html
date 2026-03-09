@@ -2332,8 +2332,8 @@ let sortByUpdated = false;         // false = 作成順(デフォルト), true =
 let currentFolderFilter = 'all';   // 'all' | folder.id
 
 // ══════════════════════════════════════════
-// HANNAH IndexedDB Storage Layer v1
-// localStorage → IndexedDB 自動マイグレーション
+// HANNAH Storage Layer v2
+// IndexedDB優先 + localStorage二重書き込み
 // ══════════════════════════════════════════
 const HANNAH_DB_NAME    = 'hannah_main';
 const HANNAH_DB_VERSION = 1;
@@ -2350,63 +2350,51 @@ function openHannahDB() {
       }
     };
     req.onsuccess  = e => { _db = e.target.result; resolve(_db); };
-    req.onerror    = e => reject(e.target.error);
+    req.onerror    = e => { console.warn('[HANNAH] IDB open error:', e.target.error); reject(e.target.error); };
+    req.onblocked  = () => { console.warn('[HANNAH] IDB blocked'); };
   });
 }
 
 function idbGet(key) {
-  return openHannahDB().then(db => new Promise((resolve, reject) => {
-    const tx  = db.transaction('store', 'readonly');
-    const req = tx.objectStore('store').get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror   = () => reject(req.error);
-  }));
+  return openHannahDB().then(db => new Promise((resolve) => {
+    try {
+      const tx  = db.transaction('store', 'readonly');
+      const req = tx.objectStore('store').get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror   = () => { console.warn('[HANNAH] idbGet error:', key); resolve(null); };
+    } catch(e) { resolve(null); }
+  })).catch(() => null);
 }
 
 function idbSet(key, value) {
-  return openHannahDB().then(db => new Promise((resolve, reject) => {
-    const tx  = db.transaction('store', 'readwrite');
-    const req = tx.objectStore('store').put(value, key);
-    req.onsuccess = () => resolve();
-    req.onerror   = () => reject(req.error);
-  }));
+  return openHannahDB().then(db => new Promise((resolve) => {
+    try {
+      const tx  = db.transaction('store', 'readwrite');
+      const req = tx.objectStore('store').put(value, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror   = () => { console.warn('[HANNAH] idbSet error:', key); resolve(false); };
+    } catch(e) { resolve(false); }
+  })).catch(() => false);
 }
 
-// ── 起動時1回限り: localStorage → IndexedDB マイグレーション ──
-async function migrateFromLocalStorage() {
-  try {
-    const existing = await idbGet('hannah_migrated');
-    if (existing) return; // 移行済み
-
-    const raw = localStorage.getItem('memoire_data');
-    if (raw) {
-      await idbSet('memoire_data', JSON.parse(raw));
-      console.log('[HANNAH] Migrated memoire_data to IndexedDB');
-    }
-    const sets = localStorage.getItem('hannah_settings');
-    if (sets) {
-      await idbSet('hannah_settings', JSON.parse(sets));
-      console.log('[HANNAH] Migrated hannah_settings to IndexedDB');
-    }
-    await idbSet('hannah_migrated', true);
-  } catch(e) {
-    console.warn('[HANNAH] Migration error:', e);
-  }
-}
-
-// ── データ読み込み (IndexedDB、フォールバック: localStorage) ──
+// ── データ読み込み: IndexedDB → localStorage の順で試みる ──
 async function loadData() {
+  let loaded = false;
+  // 1. IndexedDB から読む
   try {
-    await migrateFromLocalStorage();
     const d = await idbGet('memoire_data');
     if (d) {
       memos      = Array.isArray(d) ? d : (d.memos || []);
       folders    = d.folders    || [];
       tasks      = d.tasks      || [];
       trashMemos = d.trash      || [];
+      loaded = true;
+      console.log('[HANNAH] Loaded from IndexedDB');
     }
-  } catch(e) {
-    // IndexedDB失敗時はlocalStorageにフォールバック
+  } catch(e) { console.warn('[HANNAH] IDB load failed:', e); }
+
+  // 2. IndexedDBが空の場合、localStorageから移行
+  if (!loaded) {
     try {
       const saved = localStorage.getItem('memoire_data');
       if (saved) {
@@ -2415,18 +2403,24 @@ async function loadData() {
         folders    = d.folders    || [];
         tasks      = d.tasks      || [];
         trashMemos = d.trash      || [];
+        loaded = true;
+        console.log('[HANNAH] Migrated from localStorage');
+        // IndexedDBに保存しておく
+        saveData();
       }
-    } catch(e2) {}
+    } catch(e) { console.warn('[HANNAH] localStorage load failed:', e); }
   }
 }
 
-// ── データ保存 (IndexedDB優先) ──
+// ── データ保存: IndexedDB + localStorage 両方に書く（確実性のため） ──
 function saveData() {
   const payload = { memos, folders, tasks, trash: trashMemos };
-  idbSet('memoire_data', payload).catch(() => {
-    // フォールバック
-    try { localStorage.setItem('memoire_data', JSON.stringify(payload)); } catch(e) {}
+  // IndexedDB
+  idbSet('memoire_data', payload).then(ok => {
+    if (!ok) console.warn('[HANNAH] IDB save failed, using localStorage only');
   });
+  // localStorage にも同時に保存（バックアップ）
+  try { localStorage.setItem('memoire_data', JSON.stringify(payload)); } catch(e) {}
 }
 
 // ======= MEMO MANAGEMENT =======
@@ -3885,9 +3879,16 @@ let appSettings = {
 let autoSaveTimer = null;
 
 async function loadSettings() {
+  // IndexedDB から読む
   try {
     const saved = await idbGet('hannah_settings');
-    if (saved) appSettings = { ...appSettings, ...saved };
+    if (saved) {
+      appSettings = { ...appSettings, ...saved };
+    } else {
+      // localStorage にフォールバック
+      const raw = localStorage.getItem('hannah_settings');
+      if (raw) appSettings = { ...appSettings, ...JSON.parse(raw) };
+    }
   } catch(e) {
     try {
       const raw = localStorage.getItem('hannah_settings');
@@ -3899,9 +3900,9 @@ async function loadSettings() {
 }
 
 function saveSettings() {
-  idbSet('hannah_settings', appSettings).catch(() => {
-    try { localStorage.setItem('hannah_settings', JSON.stringify(appSettings)); } catch(e) {}
-  });
+  // IndexedDB + localStorage 両方に保存
+  idbSet('hannah_settings', appSettings);
+  try { localStorage.setItem('hannah_settings', JSON.stringify(appSettings)); } catch(e) {}
 }
 
 function openSettings(tab) {
