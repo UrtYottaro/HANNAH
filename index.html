@@ -2415,12 +2415,15 @@ async function loadData() {
 // ── データ保存: IndexedDB + localStorage 両方に書く（確実性のため） ──
 function saveData() {
   const payload = { memos, folders, tasks, trash: trashMemos };
-  // IndexedDB
+  // localStorage に即時保存（同期・確実）
+  try {
+    localStorage.setItem('memoire_data', JSON.stringify(payload));
+  } catch(e) { console.warn('[HANNAH] localStorage save failed:', e); }
+  // IndexedDB にも非同期保存
   idbSet('memoire_data', payload).then(ok => {
-    if (!ok) console.warn('[HANNAH] IDB save failed, using localStorage only');
+    if (ok) console.log('[HANNAH] Saved to IDB, memos:', payload.memos.length);
+    else console.warn('[HANNAH] IDB save failed');
   });
-  // localStorage にも同時に保存（バックアップ）
-  try { localStorage.setItem('memoire_data', JSON.stringify(payload)); } catch(e) {}
 }
 
 // ======= MEMO MANAGEMENT =======
@@ -3024,7 +3027,7 @@ function animateNetwork() {
 
 // Canvas drag
 const canvas = document.getElementById('network-canvas');
-canvas.addEventListener('mousedown', e => {
+if (canvas) canvas.addEventListener('mousedown', e => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   dragNode = networkNodes.find(n => {
@@ -3032,14 +3035,14 @@ canvas.addEventListener('mousedown', e => {
     return Math.sqrt(dx*dx + dy*dy) < n.r + 4;
   });
 });
-canvas.addEventListener('mousemove', e => {
+if (canvas) canvas.addEventListener('mousemove', e => {
   if (!dragNode) return;
   const rect = canvas.getBoundingClientRect();
   dragNode.x = e.clientX - rect.left;
   dragNode.y = e.clientY - rect.top;
   dragNode.vx = 0; dragNode.vy = 0;
 });
-canvas.addEventListener('mouseup', () => dragNode = null);
+if (canvas) canvas.addEventListener('mouseup', () => dragNode = null);
 
 // ======= TAB SWITCHING =======
 function switchTab(tab) {
@@ -4499,7 +4502,7 @@ function resetAllSettings() {
 }
 
 // Init settings on load
-loadSettings();
+(async () => { await loadSettings(); })();
 
 
 
