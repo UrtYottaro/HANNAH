@@ -1,0 +1,52 @@
+{
+  "name": "hannah",
+  "version": "0.3.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:start": "vite build && electron .",
+    "dist:win": "vite build && electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "vite": "^8.0.0"
+  },
+  "description": "HANNAH — ブラウザで動く個人用メモアプリ",
+  "author": "UrtYottaro",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "build": {
+    "appId": "io.github.urtyottaro.hannah",
+    "productName": "HANNAH",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "HANNAH-Setup-${version}.${ext}"
+    }
+  }
+}

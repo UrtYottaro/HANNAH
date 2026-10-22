@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.DS_Store
+*.backup
+HANNAH_Vers*.html
+
+backup_v*/
+Fonts/
+
+# 個人のメモデータ（書き出し・取り込み用のJSON）は公開しない
+hannah_export*.json
+merged_import.json
+
+# フォントファイルは再配布できないので、どこにあっても公開しない
+*.otf
+*.ttf
+*.woff
+*.woff2
+*.ttc
+
+# ローカルの作業設定
+.claude/
+
+# デスクトップ版のビルド成果物
+release/
